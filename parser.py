@@ -10,7 +10,7 @@ LOG_RE = re.compile(
     r'^(?P<ip>\d{1,3}(?:\.\d{1,3}){3}) - - '
     r'\[(?P<time>[^\]]+)\] '
     r'"(?P<method>\S+)\s+(?P<path>\S+)\s+(?P<proto>[^"]+)" '
-    r'200 (?P<size>\d+|-) '
+    r'(?P<status>\d{3}) (?P<size>\d+|-) '
     r'"(?P<referer>[^"]*)" "(?P<ua>[^"]*)"$'
 )
 
@@ -23,6 +23,7 @@ def parse_line(line: str):
         return None
     d = m.groupdict()
 
+    d['status'] = int(d['status'])
     d['size'] = int(d['size']) if d['size'] != '-' else None
 
     # try to parse time
