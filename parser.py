@@ -79,15 +79,52 @@ def parse_stream(f):
             yield parsed
 
 
+def parse_timestamp(s):
+    return datetime.strptime(s, "%Y-%m-%d_%H%M").astimezone()
+
+
+DATE_RE = re.compile(r"\[(\d{2}/[A-Za-z]{3}/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4})\]")
+def filter_from(it, timestamp_from):
+    for s in it:
+        m = DATE_RE.search(s)
+        if not m:
+            continue
+        date_str = m.group(1)
+        dt = datetime.strptime(date_str, "%d/%b/%Y:%H:%M:%S %z")
+        if dt >= timestamp_from:
+            yield s
+
+
+def filter_to(it, timestamp_to):
+    for s in it:
+        m = DATE_RE.search(s)
+        if not m:
+            continue
+        date_str = m.group(1)
+        dt = datetime.strptime(date_str, "%d/%b/%Y:%H:%M:%S %z")
+        if dt <= timestamp_from:
+            yield s
+
+
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--top_ips", action="store_true", help="count top ip addrs")
     p.add_argument("--top_urls", action="store_true", help="count top url addrs")
     p.add_argument("--top_status", action="store_true", help="count top by status")
+    p.add_argument("--timestamp_from", metavar="YYYY-MM-DD_HHMM", help="timestamp range: from")
+    p.add_argument("--timestamp_to", metavar="YYYY-MM-DD_HHMM", help="timestamp range: from")
     p.add_argument("--output_jsonl", action="store_true", help="output parsed data as jsonl")
     args = p.parse_args()
 
     src = sys.stdin
+
+    if args.timestamp_from:
+        timestamp_from = parse_timestamp(args.timestamp_from)
+        src = filter_from(src, timestamp_from)
+
+    if args.timestamp_to:
+        timestamp_to = parse_timestamp(args.timestamp_to)
+        src = filter_to(src, timestamp_to)
 
     if args.top_ips:
         top_ips(parse_stream(src))
