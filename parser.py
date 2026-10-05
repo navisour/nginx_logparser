@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 import argparse
+import csv
+import ipaddress
+import json
 import re
 import sys
-import json
 from collections import defaultdict
 from datetime import datetime
 
@@ -72,6 +74,51 @@ def top_statuses(parsed):
             print(f"{status}: {path}: {cnt}")
 
 
+def read_geo2ip(filename):
+    g2i = {}
+    with open(filename, encoding='utf-8') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            g2i[row["network"]] = row
+    return g2i
+
+
+def _ip_country_get2ip(ip_address, geo2ip):
+    for mask in range(32, 0, -1):
+        network_str = f"{ip_address}/{mask}"
+        network = ipaddress.ip_network(network_str, strict=False)
+        row = geo2ip.get(str(network))
+        if row:
+            return row.get("country_iso_code")
+
+    return None
+
+
+IP_COUNTY_CACHE = {}
+def ip_country_get2ip(ip_address, geo2ip):
+    if ip_address in IP_COUNTY_CACHE:
+        return IP_COUNTY_CACHE[ip_address]
+
+    country = _ip_country_get2ip(ip_address, geo2ip)
+    IP_COUNTY_CACHE[ip_address] = country
+    return country
+
+
+def top_countries_get2ip(parsed, geo2ip):
+    top_countries = defaultdict(int)
+
+    for rec in parsed:
+        ip = rec["ip"]
+        country = ip_country_get2ip(ip, geo2ip)
+        if not country:
+            continue
+
+        top_countries[country] += 1
+
+    for country, count in sorted(top_countries.items(), key=lambda x: x[1], reverse=True):
+        print(f"{country}: {count}")
+
+
 def parse_stream(f):
     for lineno, line in enumerate(f, 1):
         parsed = parse_line(line)
@@ -84,6 +131,7 @@ if __name__ == "__main__":
     p.add_argument("--top_ips", action="store_true", help="count top ip addrs")
     p.add_argument("--top_urls", action="store_true", help="count top url addrs")
     p.add_argument("--top_status", action="store_true", help="count top by status")
+    p.add_argument("--top_countries_geo2ip", help="count top countries, as an argument get a file from https://datahub.io/core/geoip2-ipv4#geoip2-ipv4, e.g. --top_countries_geo2ip geoip2-ipv4.csv")
     p.add_argument("--output_jsonl", action="store_true", help="output parsed data as jsonl")
     args = p.parse_args()
 
@@ -97,6 +145,10 @@ if __name__ == "__main__":
 
     if args.top_status:
         top_statuses(parse_stream(src))
+
+    if args.top_countries_geo2ip:
+        geo2ip = read_geo2ip(args.top_countries_geo2ip)
+        top_countries_get2ip(parse_stream(src), geo2ip)
 
     if args.output_jsonl:
         for rec in parse_stream(src):
